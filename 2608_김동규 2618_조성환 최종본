@@ -1,103 +1,223 @@
+'''
+본 코드는 colab에서 실행하는 것을 가정하였습니다.
+'''
+
 import random 
+from random import shuffle
 
 import numpy as np
 
 import matplotlib.pyplot as plt
+from google.colab import files
+color = ['r', 'g', 'b', 'white', 'navy', 'black', 'yellow', 'cyan', 'brown', 'purple', 'lime']
+jump = [1,2,3,4,5,6]
+num = [500, 600, 700, 800, 900, 1000]
+size = input('size를 골라주세요')
+shuffle(color)
 
- 
 
-#조건 입력 받기
+time = 0
+a = random.choice(num)
+if int(size) <= 3:
+    a = 10 * a
+    
+elif 3 < int(size) <= 7:
+    a = 5 * a
 
-a_1, b_1, c_1 = map(float, input('첫번째 일차부등식의 x의 계수, y의 계수, 상수항을 입력해주세요! (우변은 0으로, 부등호는 좌변이 더 큰 상태를 맞춰주세요!) : ').split())
+elif 7 < int(size) <= 35:
+    a = 2 * a
+    
+else:
+    a = a
 
-a_2, b_2, c_2 = map(float, input('두번째 일차부등식의 x의 계수, y의 계수, 상수항을 입력해주세요! (우변은 0으로, 부등호는 좌변이 더 큰 상태를 맞춰주세요!) : ').split())
 
-a_3, b_3, c_3 = map(float, input('세번째 일차부등식의 x의 계수, y의 계수, 상수항을 입력해주세요! (우변은 0으로, 부등호는 좌변이 더 큰 상태를 맞춰주세요!) : ').split())
 
- 
+def draw():
+    c = random.choice(jump)
+    xs = [i+1 for i in range(0, a, c)]
+    ys = [j+1 for j in range(0, a, c)]
+    shuffle(xs)
+    shuffle(xs)
+    b = color.pop()
+    plt.scatter(xs, ys, s = int(size), color = b)
+    
+while time < 11:
+    draw()
+    time += 1
 
-#일차연립방정식의 해 구하기
 
- 
+plt.savefig('GG.jpg')
 
-#1,2번 방정식의 해
 
-x_1 = (b_1*c_2 - b_2*c_1)/(b_2*a_1 - a_2*b_1)
 
-y_1 = (c_2*a_1 - c_1*a_2)/(a_2*b_1 - a_1*b_2)
 
- 
+plt.show() # 이미지 보여주기
 
-#1,3번 방정식의 해
 
-x_2 =(b_1*c_3 - b_3*c_1)/(b_3*a_1 - a_3*b_1)
 
-y_2 =(c_3*a_1 - c_1*a_3)/(a_3*b_1 - a_1*b_3)
+from PIL import Image
 
- 
+im = Image.open('GG.jpg') # 이미지 불러오기
 
-#2,3번 방정식의 해
+area = (100, 50, 350, 250) # 이미지 점 부분만 자르기 
+nimage = im.crop(area)
+nimage.show()
+nimage.save('GG2.jpg') 
+from google.colab import files
 
-x_3=(b_3*c_2 - b_2*c_3)/(b_2*a_3 - a_2*b_3)
+files.download('GG2.jpg') # 만든 이미지를 다운로드
 
-y_3=(c_2*a_3 - c_3*a_2)/(a_2*b_3 - a_3*b_2)
+from google.colab import files # 바꿀 원본 파일과 점묘화 가져오기
+uploaded = files.upload() # 파일 업로드 기능 실행
 
- 
+for fn in uploaded.keys(): # 업로드된 파일 정보 출력
+    print('User uploaded file "{name}" with length {length} bytes'.format(
+        name=fn, length=len(uploaded[fn])))
 
- 
+from torchvision.models import vgg19
+from torch.autograd import Variable
+from collections import OrderedDict
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision.transforms as transforms
+from PIL import Image
+%pylab inline
 
-#랜덤하게 뿌린 점을 담을 리스트와 그 중에서 영역 안에 포함된 점을 담을 리스트 설정
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
 
-randompoint=[]
+imsize = 512 
+is_cuda = torch.cuda.is_available()
 
-conditionpoint=[]
+prep = transforms.Compose([transforms.Resize(imsize),
+                           transforms.ToTensor(),
+                           transforms.Lambda(lambda x: x[torch.LongTensor([2,1,0])]), #turn to BGR
+                           transforms.Normalize(mean=[0.40760392, 0.45795686, 0.48501961], #subtract imagenet mean
+                                                std=[1,1,1]),
+                           transforms.Lambda(lambda x: x.mul_(255)),
+                          ])
+postpa = transforms.Compose([transforms.Lambda(lambda x: x.mul_(1./255)),
+                           transforms.Normalize(mean=[-0.40760392, -0.45795686, -0.48501961], #add imagenet mean
+                                                std=[1,1,1]),
+                           transforms.Lambda(lambda x: x[torch.LongTensor([2,1,0])]), #turn to RGB
+                           ])
+postpb = transforms.Compose([transforms.ToPILImage()])
+def postp(tensor): # to clip results in the range [0,1]
+    t = postpa(tensor)
+    t[t>1] = 1    
+    t[t<0] = 0
+    img = postpb(t)
+    return img
 
- 
+def image_loader(image_name):
+    image = Image.open(image_name)
+    image = Variable(prep(image))
+    # fake batch dimension required to fit network's input dimensions
+    image = image.unsqueeze(0)
+    return image
 
-#세 방정식으로 만들어진 도형(삼각형)을 포함하는 최소의 직사각형 안에 랜덤하게 점을 뿌리기
+Image.open('two.jpg').resize((600,600))#바꿀 이미지 가져오기
 
-a=max(x_1,x_2,x_3)
+style_img = image_loader("GG2.jpg")#점묘화 가져오기
+content_img = image_loader("two.jpg")#바꿀 이미지 가져오기
+vgg = vgg19(pretrained=True).features
+for param in vgg.parameters():
+    param.requires_grad = False
+if is_cuda:
+    style_img = style_img.cuda()
+    content_img = content_img.cuda()
+    vgg = vgg.cuda()
 
-b=min(x_1,x_2,x_3)
+opt_img = Variable(content_img.data.clone(),requires_grad=True)
 
-c=max(y_1,y_2,y_3)
+style_layers = [1,6,11,20,25]
+content_layers = [21]
+loss_layers = style_layers + content_layers
 
-d=min(y_1,y_2,y_3)
+class LayerActivations():
+    features=[]
+    
+    def __init__(self,model,layer_nums):
+        
+        self.hooks = []
+        for layer_num in layer_nums:
+            self.hooks.append(model[layer_num].register_forward_hook(self.hook_fn))
+    
+    def hook_fn(self,module,input,output):
+        self.features.append(output)
 
- 
+    
+    def remove(self):
+        for hook in self.hooks:
+            hook.remove()
 
-for i in range(1000):
+class GramMatrix(nn.Module):
+    
+    def forward(self,input):
+        b,c,h,w = input.size()
+        features = input.view(b,c,h*w)
+        gram_matrix =  torch.bmm(features,features.transpose(1,2))
+        gram_matrix.div_(h*w)
+        return gram_matrix
+        
+class StyleLoss(nn.Module):
+    
+    def forward(self,inputs,targets):
+        out = nn.MSELoss()(GramMatrix()(inputs),targets)
+        return (out)
 
-    randompoint += [[0.01*random.randint(100*int(b),100*(int(a)+1)), 0.01*random.randint(100*int(d),100*(int(c)+1))]]
+def extract_layers(layers,img,model=None):
+    la = LayerActivations(model,layers)
+    #Clearing the cache 
+    la.features = []
+    out = model(img)
+    la.remove()
+    return la.features
 
- 
 
-# 이 중 조건을 만족하는 점들을 다른 리스트에 담기
+content_targets = extract_layers(content_layers,content_img,model=vgg)
+content_targets = [t.detach() for t in content_targets]
+style_targets = extract_layers(style_layers,style_img,model=vgg)
+style_targets = [GramMatrix()(t).detach() for t in style_targets]
+targets = style_targets + content_targets
 
-for i in range(len(randompoint)):
+loss_fns = [StyleLoss()] * len(style_layers) + [nn.MSELoss()] * len(content_layers)
+if is_cuda:
+    loss_fns = [fn.cuda() for fn in loss_fns]
 
-    if a_1*randompoint[i][0]+b_1*randompoint[i][1]+c_1>0 and a_2*randompoint[i][0]+b_2*randompoint[i][1]+c_2>0 and a_3*randompoint[i][0]+b_3*randompoint[i][1]+c_3>0:
+#these are good weights settings:
+style_weights = [1e3/n**2 for n in [64,128,256,512,512]]
+content_weights = [1e0]
+weights = style_weights + content_weights
 
-        conditionpoint.append(randompoint[i])
+%time
+#run style transferu
+max_iter = 500
+show_iter = 50
+optimizer = optim.LBFGS([opt_img]);
+n_iter=[0]
 
- 
+while n_iter[0] <= max_iter:
 
-#그래프 그리기
+    def closure():
+        optimizer.zero_grad()
+        
+        out = extract_layers(loss_layers,opt_img,model=vgg)
+        layer_losses = [weights[a] * loss_fns[a](A, targets[a]) for a,A in enumerate(out)]
+        loss = sum(layer_losses)
+        loss.backward()
+        n_iter[0]+=1
+        #print loss
+        if n_iter[0]%show_iter == (show_iter-1):
+            print('Iteration: %d, loss: %f'%(n_iter[0]+1, loss.data))
 
-list_x=[]
+        return loss
+    
+    optimizer.step(closure)
 
-list_y=[]
+# 결과 출력
+out_img_hr = postp(opt_img.data[0].cpu().squeeze())
 
- 
-
-for i in range(len(conditionpoint)):
-
-    list_x = list_x + [conditionpoint[i][0]]
-
-    list_y = list_y + [conditionpoint[i][1]]
-
- 
-
-plt.scatter(list_x ,list_y)
-
-plt.show()
+imshow(out_img_hr)
+gcf().set_size_inches(10,10)
